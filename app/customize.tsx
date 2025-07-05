@@ -1,11 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Alert,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text
+} from 'react-native';
 import { Button, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ColorPicker from 'react-native-wheel-color-picker';
-import eventBus from '../utils/event-bus'; // ✅ event emitter
+import eventBus from '../utils/event-bus';
 
 export default function CustomizeScreen() {
   const { text: rawText, name: rawName } = useLocalSearchParams();
@@ -18,8 +24,9 @@ export default function CustomizeScreen() {
   const [showQRPicker, setShowQRPicker] = useState(false);
   const [showBGPicker, setShowBGPicker] = useState(false);
 
-  const key = `${name}|${text}`; // ✅ Per-project key
-  console.log('Customize Key:', key);
+  const fadeAnim = useRef(new Animated.Value(1)).current; // Animation ref
+
+  const key = `${name}|${text}`;
 
   useEffect(() => {
     const load = async () => {
@@ -44,10 +51,33 @@ export default function CustomizeScreen() {
     parsed[key] = { qrColor, bgColor };
     await AsyncStorage.setItem('custom_qr_map', JSON.stringify(parsed));
 
-    eventBus.emit('customizationUpdated', { name, text }); // ✅ notify listeners
+    eventBus.emit('customizationUpdated', { name, text });
+    router.back();
+  };
 
-    Alert.alert('✅ Saved customization');
-    router.back(); // ✅ go back to analytics
+  const handleResetToDefault = async () => {
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(async () => {
+      setQrColor('#000000');
+      setBgColor('#ffffff');
+
+      const all = await AsyncStorage.getItem('custom_qr_map');
+      const parsed = all ? JSON.parse(all) : {};
+      parsed[key] = { qrColor: '#000000', bgColor: '#ffffff' };
+      await AsyncStorage.setItem('custom_qr_map', JSON.stringify(parsed));
+
+      eventBus.emit('customizationUpdated', { name, text });
+
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+
+    });
   };
 
   return (
@@ -97,12 +127,16 @@ export default function CustomizeScreen() {
       )}
 
       <Text style={styles.label}>Live Preview</Text>
-      <View style={styles.previewWrapper}>
+      <Animated.View style={[styles.previewWrapper, { opacity: fadeAnim }]}>
         <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
-      </View>
+      </Animated.View>
 
       <Button mode="contained" onPress={handleSave} style={styles.saveButton}>
         Save & Go Back
+      </Button>
+
+      <Button mode="outlined" onPress={handleResetToDefault} style={styles.resetButton}>
+        Reset to Default
       </Button>
     </ScrollView>
   );
@@ -149,5 +183,9 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: 32,
+  },
+  resetButton: {
+    marginTop: 16,
+    borderColor: '#aaa',
   },
 });

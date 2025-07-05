@@ -1,6 +1,6 @@
-// Hybrid GenerateScreen.tsx using Cosmos DB backend + AsyncStorage (TS-safe)
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -15,12 +15,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Button, Divider, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
-// @ts-ignore
-import { useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { Button, Divider, TextInput, Title } from 'react-native-paper';
 
 const BACKEND_URL = 'https://qr-backend-o6i5.onrender.com';
 
@@ -35,7 +32,7 @@ export default function GenerateScreen() {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const qrRef = useRef<ViewShot>(null);
-  const flatListRef = useRef<FlatList>(null);
+  const [currentTrackingId, setCurrentTrackingId] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -62,12 +59,15 @@ export default function GenerateScreen() {
     }
   };
 
-  const saveProjectToBackend = async (base64: string) => {
+  const saveProjectToBackend = async (base64: string, id: string) => {
     const payload = {
+      id,
       name: projectName.trim(),
       text: text.trim(),
       time: new Date().toISOString(),
       qrImage: base64,
+      type: 'qr_project',
+      scanCount: 0,
     };
     const res = await fetch(`${BACKEND_URL}/api/save-project`, {
       method: 'POST',
@@ -80,6 +80,7 @@ export default function GenerateScreen() {
       setText('');
       setProjectName('');
       setShowProjectModal(false);
+      setCurrentTrackingId('');
       loadProjects();
     } else {
       Alert.alert('❌ Save failed', json.message || 'Try again later');
@@ -88,6 +89,8 @@ export default function GenerateScreen() {
 
   const handleGenerate = () => {
     if (!text.trim()) return;
+    const id = `${Date.now()}-${Math.random()}`;
+    setCurrentTrackingId(id);
     setShowQR(true);
     Alert.alert('Save Project', 'Do you want to save this QR code project?', [
       { text: 'No', style: 'cancel' },
@@ -96,8 +99,8 @@ export default function GenerateScreen() {
   };
 
   const handleSave = async () => {
-    if (!qrRef.current?.capture) {
-      Alert.alert('QR not available');
+    if (!qrRef.current?.capture || !currentTrackingId) {
+      Alert.alert('QR not ready');
       return;
     }
     const uri = await qrRef.current.capture();
@@ -110,7 +113,7 @@ export default function GenerateScreen() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64 = reader.result?.toString().split(',')[1] || '';
-      saveProjectToBackend(base64);
+      saveProjectToBackend(base64, currentTrackingId);
     };
     reader.readAsDataURL(blob);
   };
@@ -148,7 +151,7 @@ export default function GenerateScreen() {
 
   const handleProjectPress = async (item: any) => {
     await AsyncStorage.setItem('active_project', JSON.stringify(item));
-    router.push({ pathname: '/(tabs)/analytics', params: { text: item.text, name: item.name } });
+    router.push({ pathname: '/(tabs)/analytics', params: { text: item.text, name: item.name, id: item.id } });
   };
 
   const shareQR = async () => {
@@ -176,7 +179,9 @@ export default function GenerateScreen() {
 
       {showQR && text.trim().length > 0 && (
         <View style={styles.qrContainer}>
-          <ViewShot ref={qrRef}><QRCode value={text} size={200} /></ViewShot>
+          <ViewShot ref={qrRef}>
+            <QRCode value={`${BACKEND_URL}/track/${currentTrackingId}`} size={200} />
+          </ViewShot>
           <Button onPress={shareQR} style={{ marginTop: 12 }}>Share QR</Button>
         </View>
       )}
@@ -212,6 +217,7 @@ export default function GenerateScreen() {
                 {item.qrImage && (
                   <Image source={{ uri: `data:image/png;base64,${item.qrImage}` }} style={{ width: 100, height: 100, marginTop: 10 }} />
                 )}
+                <Text style={{ marginTop: 6, fontSize: 13 }}>Scans: {item.scanCount ?? 0}</Text>
                 <View style={styles.row}>
                   <Button onPress={() => setEditIndex(index)}>Edit</Button>
                   <Button onPress={() => handleDeleteProject(index)} labelStyle={{ color: 'red' }}>Delete</Button>
@@ -223,7 +229,6 @@ export default function GenerateScreen() {
         ListEmptyComponent={<Text>No projects yet.</Text>}
       />
 
-      {/* Modal to enter project name */}
       <Modal visible={showProjectModal} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContainer}>

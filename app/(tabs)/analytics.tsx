@@ -6,6 +6,7 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
+import eventBus from '../../utils/event-bus'; // ✅ correct path from (tabs)/analytics.tsx
 
 export default function AnalyticsScreen() {
   const { text: rawText, name: rawName } = useLocalSearchParams();
@@ -17,17 +18,34 @@ export default function AnalyticsScreen() {
   const [bgColor, setBgColor] = useState('#ffffff');
   const qrRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
 
+  const key = `${name}|${text}`; // ✅ unique per-project key
+
+  const loadCustomization = async () => {
+    const all = await AsyncStorage.getItem('custom_qr_map');
+    const parsed = all ? JSON.parse(all) : {};
+    if (parsed[key]) {
+      setQrColor(parsed[key].qrColor || '#000000');
+      setBgColor(parsed[key].bgColor || '#ffffff');
+    } else {
+      setQrColor('#000000');
+      setBgColor('#ffffff');
+    }
+  };
+
   useEffect(() => {
-    const loadCustomization = async () => {
-      const all = await AsyncStorage.getItem('custom_qr_map');
-      const parsed = all ? JSON.parse(all) : {};
-      const key = `${name}|${text}`;
-      if (parsed[key]) {
-        setQrColor(parsed[key].qrColor || '#000000');
-        setBgColor(parsed[key].bgColor || '#ffffff');
+    loadCustomization();
+
+    // ✅ Listen for per-project updates
+    const handler = (payload: { name: string; text: string }) => {
+      if (payload.name === name && payload.text === text) {
+        loadCustomization();
       }
     };
-    loadCustomization();
+
+    eventBus.on('customizationUpdated', handler);
+    return () => {
+      eventBus.off('customizationUpdated', handler);
+    };
   }, [name, text]);
 
   const handleShareQR = async () => {
@@ -39,6 +57,17 @@ export default function AnalyticsScreen() {
 
     const uri = await ref.capture();
     await Sharing.shareAsync(uri);
+  };
+
+  const handleCustomizePress = () => {
+    router.push({
+      pathname: '/customize',
+      params: { name, text },
+    });
+  };
+
+  const handleTrackingPress = () => {
+    Alert.alert('Coming Soon', 'Tracking analytics is coming in a future update!');
   };
 
   if (!text || !name) {
@@ -62,9 +91,18 @@ export default function AnalyticsScreen() {
         </ViewShot>
       </View>
 
-      <Button mode="outlined" onPress={handleShareQR}>
+      <Button mode="outlined" onPress={handleShareQR} style={styles.shareButton}>
         Share QR
       </Button>
+
+      <View style={styles.buttonRow}>
+        <Button mode="contained" onPress={handleCustomizePress} style={styles.button}>
+          Customize
+        </Button>
+        <Button mode="outlined" onPress={handleTrackingPress} style={styles.button}>
+          Tracking
+        </Button>
+      </View>
 
       <Text style={styles.label}>Encoded Content:</Text>
       <Text style={styles.content}>{text}</Text>
@@ -112,12 +150,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
   },
+  shareButton: {
+    marginBottom: 16,
+  },
   buttonRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+    gap: 12,
   },
   button: {
     flex: 1,

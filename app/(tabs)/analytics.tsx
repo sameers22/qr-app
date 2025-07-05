@@ -6,54 +6,32 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
-import eventBus from '../../utils/event-bus';
-
-const BACKEND_URL = 'https://qr-backend-o6i5.onrender.com';
+import eventBus from '../../utils/event-bus'; // ✅ import mitt bus
 
 export default function AnalyticsScreen() {
-  const { text: rawText, name: rawName, id } = useLocalSearchParams();
+  const { text: rawText, name: rawName } = useLocalSearchParams();
   const text = typeof rawText === 'string' ? rawText : '';
   const name = typeof rawName === 'string' ? rawName : '';
   const router = useRouter();
 
   const [qrColor, setQrColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#ffffff');
-  const [scanCount, setScanCount] = useState<number | null>(null);
   const qrRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
-
-  const key = `${name}|${text}`;
 
   const loadCustomization = async () => {
     const all = await AsyncStorage.getItem('custom_qr_map');
     const parsed = all ? JSON.parse(all) : {};
+    const key = `${name}|${text}`;
     if (parsed[key]) {
       setQrColor(parsed[key].qrColor || '#000000');
       setBgColor(parsed[key].bgColor || '#ffffff');
-    } else {
-      setQrColor('#000000');
-      setBgColor('#ffffff');
-    }
-  };
-
-  const loadTrackingStats = async () => {
-    if (!id) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/get-project/${id}`);
-      const json = await res.json();
-      if (res.ok && json.project) {
-        setScanCount(json.project.scanCount ?? 0);
-      } else {
-        console.warn('No scan data found.');
-      }
-    } catch (err) {
-      console.error('📉 Tracking fetch error:', err);
     }
   };
 
   useEffect(() => {
     loadCustomization();
-    loadTrackingStats();
 
+    // ✅ Listen for customization updates
     const handler = (payload: { name: string; text: string }) => {
       if (payload.name === name && payload.text === text) {
         loadCustomization();
@@ -84,6 +62,20 @@ export default function AnalyticsScreen() {
     });
   };
 
+  const handleTrackingPress = () => {
+    Alert.alert('Coming Soon', 'Tracking analytics is coming in a future update!');
+  };
+
+  if (!text || !name) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>
+          Missing QR data. Please go back and select a project.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Title style={styles.title}>{name}</Title>
@@ -95,16 +87,13 @@ export default function AnalyticsScreen() {
         </ViewShot>
       </View>
 
-      <Button mode="outlined" onPress={handleShareQR} style={styles.shareButton}>
+      <Button mode="outlined" onPress={handleShareQR} style={styles.shareButton} textColor ="#2196F3">
         Share QR
       </Button>
 
       <View style={styles.buttonRow}>
-        <Button mode="contained" onPress={handleCustomizePress} style={styles.button}>
+        <Button mode="contained" onPress={handleCustomizePress} style={styles.button} buttonColor="#2196F3">
           Customize
-        </Button>
-        <Button mode="outlined" disabled style={styles.button}>
-          Scans: {scanCount !== null ? scanCount : '...'}
         </Button>
       </View>
 

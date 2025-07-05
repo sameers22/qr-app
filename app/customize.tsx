@@ -2,11 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text
+  Alert,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text
 } from 'react-native';
 import { Button, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
@@ -86,14 +86,20 @@ export default function CustomizeScreen() {
 
       <Text style={styles.label}>QR Color</Text>
       <TextInput
-        mode="outlined"
-        value={qrColor}
-        onChangeText={setQrColor}
-        style={styles.input}
-      />
-      <Button onPress={() => setShowQRPicker(!showQRPicker)} style={styles.toggleButton}>
-        {showQRPicker ? 'Hide Picker' : 'Pick QR Color'}
-      </Button>
+  mode="outlined"
+  value={qrColor}
+  onChangeText={setQrColor}
+  style={styles.input}
+  theme={{ colors: { primary: '#2196F3' } }}
+/>
+
+<Button
+  onPress={() => setShowQRPicker(!showQRPicker)}
+  style={styles.toggleButton}
+  textColor="#2196F3"
+>
+  {showQRPicker ? 'Hide Picker' : 'Pick QR Color'}
+</Button>
       {showQRPicker && (
         <ColorPicker
           color={qrColor}
@@ -107,14 +113,20 @@ export default function CustomizeScreen() {
 
       <Text style={styles.label}>Background Color</Text>
       <TextInput
-        mode="outlined"
-        value={bgColor}
-        onChangeText={setBgColor}
-        style={styles.input}
-      />
-      <Button onPress={() => setShowBGPicker(!showBGPicker)} style={styles.toggleButton}>
-        {showBGPicker ? 'Hide Picker' : 'Pick Background Color'}
-      </Button>
+  mode="outlined"
+  value={bgColor}
+  onChangeText={setBgColor}
+  style={styles.input}
+  theme={{ colors: { primary: '#2196F3' } }}
+/>
+
+<Button
+  onPress={() => setShowBGPicker(!showBGPicker)}
+  style={styles.toggleButton}
+  textColor="#2196F3"
+>
+  {showBGPicker ? 'Hide Picker' : 'Pick Background Color'}
+</Button>
       {showBGPicker && (
         <ColorPicker
           color={bgColor}
@@ -131,13 +143,23 @@ export default function CustomizeScreen() {
         <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
       </Animated.View>
 
-      <Button mode="contained" onPress={handleSave} style={styles.saveButton}>
-        Save & Go Back
-      </Button>
+      <Button
+  mode="contained"
+  onPress={handleSave}
+  style={styles.saveButton}
+  buttonColor="#2196F3"
+>
+  Save & Go Back
+</Button>
 
-      <Button mode="outlined" onPress={handleResetToDefault} style={styles.resetButton}>
-        Reset to Default
-      </Button>
+<Button
+  mode="outlined"
+  onPress={handleResetToDefault}
+  style={styles.resetButton}
+  textColor="#2196F3"
+>
+  Reset to Default
+</Button>
     </ScrollView>
   );
 }
@@ -145,6 +167,7 @@ export default function CustomizeScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
+    paddingTop: 80, // ⬅️ Top padding added here
     padding: 24,
     backgroundColor: '#f9f9f9',
   },

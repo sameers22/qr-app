@@ -1,5 +1,3 @@
-// Hybrid GenerateScreen.tsx using Cosmos DB backend + AsyncStorage (TS-safe)
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -18,6 +16,7 @@ import {
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
 // @ts-ignore
+import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { Button, Divider, TextInput, Title } from 'react-native-paper';
@@ -33,6 +32,8 @@ export default function GenerateScreen() {
   const [projectName, setProjectName] = useState('');
   const [search, setSearch] = useState('');
   const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [qrColor, setQrColor] = useState('#000000');
+  const [bgColor, setBgColor] = useState('#ffffff'); // ✅ added bgColor
   const [loading, setLoading] = useState(true);
   const qrRef = useRef<ViewShot>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -54,7 +55,7 @@ export default function GenerateScreen() {
       setFilteredProjects(data.projects || []);
       await AsyncStorage.setItem('qr_cache', JSON.stringify(data.projects));
     } catch (err) {
-      console.error('❌ Load error:', err);
+      console.error('Load error:', err);
       const fallback = await AsyncStorage.getItem('qr_cache');
       if (fallback) setProjects(JSON.parse(fallback));
     } finally {
@@ -68,26 +69,40 @@ export default function GenerateScreen() {
       text: text.trim(),
       time: new Date().toISOString(),
       qrImage: base64,
+      qrColor: qrColor,
+      bgColor: bgColor, // ✅ include bgColor
     };
-    const res = await fetch(`${BACKEND_URL}/api/save-project`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (res.ok) {
-      Alert.alert('✅ Saved project!');
-      setText('');
-      setProjectName('');
-      setShowProjectModal(false);
-      loadProjects();
-    } else {
-      Alert.alert('❌ Save failed', json.message || 'Try again later');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/save-project`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+
+      if (res.ok) {
+        Alert.alert('Saved project!');
+        setText('');
+        setProjectName('');
+        setQrColor('#000000');
+        setBgColor('#ffffff');
+        setShowProjectModal(false);
+        loadProjects();
+      } else {
+        Alert.alert('Save failed', json.message || 'Try again later');
+      }
+    } catch (err) {
+      console.error('Network error:', err);
+      Alert.alert('Save failed', 'Network error occurred');
     }
   };
 
   const handleGenerate = () => {
     if (!text.trim()) return;
+    setQrColor('#000000');
+    setBgColor('#ffffff');
     setShowQR(true);
     Alert.alert('Save Project', 'Do you want to save this QR code project?', [
       { text: 'No', style: 'cancel' },
@@ -100,19 +115,18 @@ export default function GenerateScreen() {
       Alert.alert('QR not available');
       return;
     }
-    const uri = await qrRef.current.capture();
-    if (!uri) {
-      Alert.alert('Failed to capture QR');
-      return;
+
+    try {
+      const uri = await qrRef.current.capture();
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await saveProjectToBackend(base64);
+    } catch (err) {
+      console.error('Failed to save QR:', err);
+      Alert.alert('Save failed', 'QR could not be captured');
     }
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result?.toString().split(',')[1] || '';
-      saveProjectToBackend(base64);
-    };
-    reader.readAsDataURL(blob);
   };
 
   const handleEditChange = (field: 'name' | 'text', value: string, index: number) => {
@@ -136,6 +150,7 @@ export default function GenerateScreen() {
   const handleDeleteProject = async (index: number) => {
     const id = projects[index].id;
     await fetch(`${BACKEND_URL}/api/delete-project/${id}`, { method: 'DELETE' });
+    await AsyncStorage.removeItem(`customization_${id}`);
     loadProjects();
   };
 
@@ -148,6 +163,8 @@ export default function GenerateScreen() {
 
   const handleProjectPress = async (item: any) => {
     await AsyncStorage.setItem('active_project', JSON.stringify(item));
+    setQrColor(item.qrColor || '#000000');
+    setBgColor(item.bgColor || '#ffffff'); // ✅ restore bgColor
     router.push({ pathname: '/(tabs)/analytics', params: { text: item.text, name: item.name } });
   };
 
@@ -171,29 +188,30 @@ export default function GenerateScreen() {
       />
 
       <View style={styles.row}>
-      <Button
-        mode="contained"
-        onPress={handleGenerate}
-        disabled={!text.trim()}
-        buttonColor="#2196F3"
-      >
-        Generate QR
-      </Button>
+        <Button
+          mode="contained"
+          onPress={handleGenerate}
+          disabled={!text.trim()}
+          buttonColor="#2196F3"
+        >
+          Generate QR
+        </Button>
 
-      <Button
-        mode="outlined"
-        onPress={() => { setText(''); setShowQR(false); }}
-        textColor="#2196F3"
-        style={{ borderColor: '#2196F3' }}
-      >
-        Clear
-      </Button>
-
+        <Button
+          mode="outlined"
+          onPress={() => { setText(''); setShowQR(false); }}
+          textColor="#2196F3"
+          style={{ borderColor: '#2196F3' }}
+        >
+          Clear
+        </Button>
       </View>
 
       {showQR && text.trim().length > 0 && (
         <View style={styles.qrContainer}>
-          <ViewShot ref={qrRef}><QRCode value={text} size={200} /></ViewShot>
+          <ViewShot ref={qrRef}>
+            <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
+          </ViewShot>
           <Button onPress={shareQR} style={{ marginTop: 12 }}>Share QR</Button>
         </View>
       )}
@@ -268,12 +286,13 @@ const styles = StyleSheet.create({
     paddingTop: 100,
     paddingHorizontal: 20,
     backgroundColor: '#f9f9f9',
+    paddingBottom: 100,
   },
   heading: {
     fontSize: 22,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#2196F3', // updated color
+    color: '#2196F3',
   },
   input: {
     marginBottom: 16,

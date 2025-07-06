@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useRef, useState } from 'react';
@@ -6,7 +5,9 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
-import eventBus from '../../utils/event-bus'; // ✅ import mitt bus
+import eventBus from '../../utils/event-bus';
+
+const BACKEND_URL = 'https://legendbackend.onrender.com';
 
 export default function AnalyticsScreen() {
   const { text: rawText, name: rawName } = useLocalSearchParams();
@@ -18,23 +19,26 @@ export default function AnalyticsScreen() {
   const [bgColor, setBgColor] = useState('#ffffff');
   const qrRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
 
-  const loadCustomization = async () => {
-    const all = await AsyncStorage.getItem('custom_qr_map');
-    const parsed = all ? JSON.parse(all) : {};
-    const key = `${name}|${text}`;
-    if (parsed[key]) {
-      setQrColor(parsed[key].qrColor || '#000000');
-      setBgColor(parsed[key].bgColor || '#ffffff');
+  const loadCustomizationFromBackend = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/get-projects`);
+      const data = await res.json();
+      const match = data.projects?.find((p: any) => p.name === name && p.text === text);
+      if (match) {
+        setQrColor(match.qrColor || '#000000');
+        setBgColor(match.bgColor || '#ffffff');
+      }
+    } catch (err) {
+      console.error('❌ Failed to load project customization:', err);
     }
   };
 
   useEffect(() => {
-    loadCustomization();
+    loadCustomizationFromBackend();
 
-    // ✅ Listen for customization updates
     const handler = (payload: { name: string; text: string }) => {
       if (payload.name === name && payload.text === text) {
-        loadCustomization();
+        loadCustomizationFromBackend();
       }
     };
 
@@ -62,10 +66,6 @@ export default function AnalyticsScreen() {
     });
   };
 
-  const handleTrackingPress = () => {
-    Alert.alert('Coming Soon', 'Tracking analytics is coming in a future update!');
-  };
-
   if (!text || !name) {
     return (
       <View style={styles.container}>
@@ -87,7 +87,7 @@ export default function AnalyticsScreen() {
         </ViewShot>
       </View>
 
-      <Button mode="outlined" onPress={handleShareQR} style={styles.shareButton} textColor ="#2196F3">
+      <Button mode="outlined" onPress={handleShareQR} style={styles.shareButton} textColor="#2196F3">
         Share QR
       </Button>
 

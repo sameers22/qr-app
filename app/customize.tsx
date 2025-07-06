@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -6,12 +5,14 @@ import {
   Animated,
   ScrollView,
   StyleSheet,
-  Text
+  Text,
 } from 'react-native';
 import { Button, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ColorPicker from 'react-native-wheel-color-picker';
 import eventBus from '../utils/event-bus';
+
+const BACKEND_URL = 'https://legendbackend.onrender.com';
 
 export default function CustomizeScreen() {
   const { text: rawText, name: rawName } = useLocalSearchParams();
@@ -21,37 +22,53 @@ export default function CustomizeScreen() {
 
   const [qrColor, setQrColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#ffffff');
+  const [projectId, setProjectId] = useState('');
   const [showQRPicker, setShowQRPicker] = useState(false);
   const [showBGPicker, setShowBGPicker] = useState(false);
 
-  const fadeAnim = useRef(new Animated.Value(1)).current; // Animation ref
-
-  const key = `${name}|${text}`;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const load = async () => {
-      const all = await AsyncStorage.getItem('custom_qr_map');
-      const parsed = all ? JSON.parse(all) : {};
-      if (parsed[key]) {
-        setQrColor(parsed[key].qrColor || '#000000');
-        setBgColor(parsed[key].bgColor || '#ffffff');
+    const fetchProject = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/get-projects`);
+        const data = await res.json();
+        const match = data.projects?.find((p: any) => p.name === name && p.text === text);
+        if (match) {
+          setQrColor(match.qrColor || '#000000');
+          setBgColor(match.bgColor || '#ffffff');
+          setProjectId(match.id);
+        }
+      } catch (err) {
+        console.error('Failed to load project:', err);
+        Alert.alert('Error', 'Could not load project customization');
       }
     };
-    load();
-  }, [key]);
+    fetchProject();
+  }, [name, text]);
 
-  const handleSave = async () => {
-    if (!text || !name) {
-      Alert.alert('Missing data');
+  const updateColors = async (qrColorValue: string, bgColorValue: string) => {
+    if (!projectId) {
+      Alert.alert('Missing project ID');
       return;
     }
 
-    const all = await AsyncStorage.getItem('custom_qr_map');
-    const parsed = all ? JSON.parse(all) : {};
-    parsed[key] = { qrColor, bgColor };
-    await AsyncStorage.setItem('custom_qr_map', JSON.stringify(parsed));
+    try {
+      await fetch(`${BACKEND_URL}/api/update-color/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrColor: qrColorValue, bgColor: bgColorValue }),
+      });
 
-    eventBus.emit('customizationUpdated', { name, text });
+      eventBus.emit('customizationUpdated', { name, text });
+    } catch (err) {
+      console.error('Color update failed:', err);
+      Alert.alert('Failed to update colors');
+    }
+  };
+
+  const handleSave = async () => {
+    await updateColors(qrColor, bgColor);
     router.back();
   };
 
@@ -61,22 +78,16 @@ export default function CustomizeScreen() {
       duration: 300,
       useNativeDriver: true,
     }).start(async () => {
-      setQrColor('#000000');
-      setBgColor('#ffffff');
-
-      const all = await AsyncStorage.getItem('custom_qr_map');
-      const parsed = all ? JSON.parse(all) : {};
-      parsed[key] = { qrColor: '#000000', bgColor: '#ffffff' };
-      await AsyncStorage.setItem('custom_qr_map', JSON.stringify(parsed));
-
-      eventBus.emit('customizationUpdated', { name, text });
-
+      const defaultQR = '#000000';
+      const defaultBG = '#ffffff';
+      setQrColor(defaultQR);
+      setBgColor(defaultBG);
+      await updateColors(defaultQR, defaultBG);
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }).start();
-
     });
   };
 
@@ -86,20 +97,16 @@ export default function CustomizeScreen() {
 
       <Text style={styles.label}>QR Color</Text>
       <TextInput
-  mode="outlined"
-  value={qrColor}
-  onChangeText={setQrColor}
-  style={styles.input}
-  theme={{ colors: { primary: '#2196F3' } }}
-/>
+        mode="outlined"
+        value={qrColor}
+        onChangeText={setQrColor}
+        style={styles.input}
+        theme={{ colors: { primary: '#2196F3' } }}
+      />
 
-<Button
-  onPress={() => setShowQRPicker(!showQRPicker)}
-  style={styles.toggleButton}
-  textColor="#2196F3"
->
-  {showQRPicker ? 'Hide Picker' : 'Pick QR Color'}
-</Button>
+      <Button onPress={() => setShowQRPicker(!showQRPicker)} style={styles.toggleButton} textColor="#2196F3">
+        {showQRPicker ? 'Hide Picker' : 'Pick QR Color'}
+      </Button>
       {showQRPicker && (
         <ColorPicker
           color={qrColor}
@@ -113,20 +120,16 @@ export default function CustomizeScreen() {
 
       <Text style={styles.label}>Background Color</Text>
       <TextInput
-  mode="outlined"
-  value={bgColor}
-  onChangeText={setBgColor}
-  style={styles.input}
-  theme={{ colors: { primary: '#2196F3' } }}
-/>
+        mode="outlined"
+        value={bgColor}
+        onChangeText={setBgColor}
+        style={styles.input}
+        theme={{ colors: { primary: '#2196F3' } }}
+      />
 
-<Button
-  onPress={() => setShowBGPicker(!showBGPicker)}
-  style={styles.toggleButton}
-  textColor="#2196F3"
->
-  {showBGPicker ? 'Hide Picker' : 'Pick Background Color'}
-</Button>
+      <Button onPress={() => setShowBGPicker(!showBGPicker)} style={styles.toggleButton} textColor="#2196F3">
+        {showBGPicker ? 'Hide Picker' : 'Pick Background Color'}
+      </Button>
       {showBGPicker && (
         <ColorPicker
           color={bgColor}
@@ -143,23 +146,13 @@ export default function CustomizeScreen() {
         <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
       </Animated.View>
 
-      <Button
-  mode="contained"
-  onPress={handleSave}
-  style={styles.saveButton}
-  buttonColor="#2196F3"
->
-  Save & Go Back
-</Button>
+      <Button mode="contained" onPress={handleSave} style={styles.saveButton} buttonColor="#2196F3">
+        Save & Go Back
+      </Button>
 
-<Button
-  mode="outlined"
-  onPress={handleResetToDefault}
-  style={styles.resetButton}
-  textColor="#2196F3"
->
-  Reset to Default
-</Button>
+      <Button mode="outlined" onPress={handleResetToDefault} style={styles.resetButton} textColor="#2196F3">
+        Reset to Default
+      </Button>
     </ScrollView>
   );
 }
@@ -167,7 +160,7 @@ export default function CustomizeScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    paddingTop: 80, // ⬅️ Top padding added here
+    paddingTop: 80,
     padding: 24,
     backgroundColor: '#f9f9f9',
   },

@@ -1,15 +1,20 @@
 {
   "expo": {
-    "name": "qr-app",
-    "slug": "qr-app",
-    "version": "1.0.0",
+    "name": "winkqr",
+    "slug": "winkqr",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/qr-logo.png",
     "scheme": "qrapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "buildNumber": "4",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sameershaik.qrapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,6 +42,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6961fb3e-e2ac-453d-9639-e78b8c474ac3"
+      }
     }
   }
 }

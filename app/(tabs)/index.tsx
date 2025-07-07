@@ -1,4 +1,5 @@
-// app/(tabs)/index.tsx (GenerateScreen)
+// app/(tabs)/index.tsx (GenerateScreen with Animations + Favorites)
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
@@ -17,12 +18,23 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Animatable from 'react-native-animatable';
 import { Button, Divider, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
 import eventBus from '../../utils/event-bus';
 
 const BACKEND_URL = 'https://legendbackend.onrender.com';
+const FAVORITES_KEY = 'favorite_project_ids';
+
+// Helper functions for favorites
+const getFavoriteProjectIds = async () => {
+  const ids = await AsyncStorage.getItem(FAVORITES_KEY);
+  return ids ? JSON.parse(ids) : [];
+};
+const setFavoriteProjectIds = async (ids: string[]) => {
+  await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(ids));
+};
 
 export default function GenerateScreen() {
   const [text, setText] = useState('');
@@ -36,13 +48,34 @@ export default function GenerateScreen() {
   const [qrColor, setQrColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#ffffff');
   const [loading, setLoading] = useState(true);
+  const [favoriteProjectIds, setFavoriteProjectIdsState] = useState<string[]>([]);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const qrRef = useRef<ViewShot>(null);
   const flatListRef = useRef<FlatList>(null);
   const router = useRouter();
 
+  // Load favorites from storage
+  useEffect(() => {
+    (async () => {
+      const ids = await getFavoriteProjectIds();
+      setFavoriteProjectIdsState(ids);
+    })();
+  }, []);
+
+  // Update local state and AsyncStorage for favorites
+  const toggleFavorite = async (projectId: string) => {
+    let updatedIds = [...favoriteProjectIds];
+    if (updatedIds.includes(projectId)) {
+      updatedIds = updatedIds.filter((id) => id !== projectId);
+    } else {
+      updatedIds.push(projectId);
+    }
+    setFavoriteProjectIdsState(updatedIds);
+    await setFavoriteProjectIds(updatedIds);
+  };
+
   useEffect(() => {
     loadProjects();
-
     const listener = () => loadProjects();
     eventBus.on('customizationUpdated', listener);
     return () => eventBus.off('customizationUpdated', listener);
@@ -137,10 +170,12 @@ export default function GenerateScreen() {
     setSearch(query);
     if (!query.trim()) return setFilteredProjects(projects);
     const lower = query.toLowerCase();
-    setFilteredProjects(projects.filter(p =>
-      p.name.toLowerCase().includes(lower) ||
-      p.text.toLowerCase().includes(lower)
-    ));
+    setFilteredProjects(
+      projects.filter((p) =>
+        p.name.toLowerCase().includes(lower) ||
+        p.text.toLowerCase().includes(lower)
+      )
+    );
   }, [projects]);
 
   const handleProjectPress = async (item: any) => {
@@ -149,7 +184,7 @@ export default function GenerateScreen() {
     setBgColor(item.bgColor || '#ffffff');
     router.push({
       pathname: '/(tabs)/analytics',
-      params: { text: item.text, name: item.name }
+      params: { text: item.text, name: item.name },
     });
   };
 
@@ -174,6 +209,12 @@ export default function GenerateScreen() {
     const id = projects[index].id;
     await fetch(`${BACKEND_URL}/api/delete-project/${id}`, { method: 'DELETE' });
     await AsyncStorage.removeItem(`customization_${id}`);
+    // Remove from favorites if present
+    if (favoriteProjectIds.includes(id)) {
+      const newFavs = favoriteProjectIds.filter((fid) => fid !== id);
+      setFavoriteProjectIdsState(newFavs);
+      await setFavoriteProjectIds(newFavs);
+    }
     loadProjects();
   };
 
@@ -184,51 +225,63 @@ export default function GenerateScreen() {
     setProjects(updated);
   };
 
+  // Show only favorites if toggled
+  const projectsToShow = showFavoritesOnly
+    ? filteredProjects.filter((p) => favoriteProjectIds.includes(p.id))
+    : filteredProjects;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.select({ ios: 'padding', android: undefined })}
     >
-      <Title style={styles.heading}>QR Code Generator</Title>
+      <Animatable.View animation="fadeInUp" duration={700}>
+        <Title style={styles.heading}>QR Code Generator</Title>
 
-      <TextInput
-        label="Enter URL or text"
-        mode="outlined"
-        value={text}
-        onChangeText={(val) => {
-          setText(val);
-          if (!val.trim()) setShowQR(false);
-        }}
-        style={styles.input}
-        theme={{ colors: { primary: '#2196F3' } }}
-      />
-
-      <View style={styles.row}>
-        <Button
-          mode="contained"
-          onPress={handleGenerate}
-          disabled={!text.trim()}
-          buttonColor="#2196F3"
-        >
-          Generate QR
-        </Button>
-        <Button
+        <TextInput
+          label="Enter URL or text"
           mode="outlined"
-          onPress={() => { setText(''); setShowQR(false); }}
-          textColor="#2196F3"
-          style={{ borderColor: '#2196F3' }}
-        >
-          Clear
-        </Button>
-      </View>
+          value={text}
+          onChangeText={(val) => {
+            setText(val);
+            if (!val.trim()) setShowQR(false);
+          }}
+          style={styles.input}
+          theme={{ colors: { primary: '#2196F3' } }}
+        />
+
+        <View style={styles.row}>
+          <Button
+            mode="contained"
+            onPress={handleGenerate}
+            disabled={!text.trim()}
+            buttonColor="#2196F3"
+          >
+            Generate QR
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => {
+              setText('');
+              setShowQR(false);
+            }}
+            textColor="#2196F3"
+            style={{ borderColor: '#2196F3' }}
+          >
+            Clear
+          </Button>
+        </View>
+      </Animatable.View>
 
       {showQR && text.trim().length > 0 && (
-        <View style={styles.qrContainer}>
+        <Animatable.View animation="zoomIn" duration={600} style={styles.qrContainer}>
           <ViewShot ref={qrRef}>
             <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
           </ViewShot>
-          <Button onPress={shareQR} style={{ marginTop: 12 }}>Share QR</Button>
-        </View>
+          <Button onPress={shareQR} style={{ marginTop: 12 }}>
+            Share QR
+          </Button>
+        </Animatable.View>
       )}
 
       <Divider style={{ marginVertical: 20 }} />
@@ -242,53 +295,82 @@ export default function GenerateScreen() {
         theme={{ colors: { primary: '#2196F3' } }}
       />
 
+      {/* Favorites Toggle Button */}
+      <Button
+        mode={showFavoritesOnly ? "contained" : "outlined"}
+        onPress={() => setShowFavoritesOnly(!showFavoritesOnly)}
+        style={{ marginBottom: 12 }}
+        buttonColor="#FFD700"
+        textColor="#222"
+      >
+        {showFavoritesOnly ? "Showing Favorites" : "Show Favorites Only"}
+      </Button>
+
       <Title style={styles.heading}>Saved Projects</Title>
+
       <FlatList
-        data={filteredProjects}
+        data={projectsToShow}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
-          <View style={styles.card}>
-            {editIndex === index ? (
-              <>
-                <RNTextInput
-                  value={item.name}
-                  onChangeText={(val) => handleEditChange('name', val, index)}
-                  style={{ marginBottom: 8 }}
+          <Animatable.View animation="fadeInUp" duration={500} delay={index * 100}>
+            <View style={styles.card}>
+              {/* Favorite Star Button (top-right) */}
+              <TouchableOpacity
+                onPress={() => toggleFavorite(item.id)}
+                style={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}
+                hitSlop={{ top: 10, left: 10, bottom: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons
+                  name={favoriteProjectIds.includes(item.id) ? 'star' : 'star-outline'}
+                  size={28}
+                  color="#FFD700"
                 />
-                <RNTextInput
-                  value={item.text}
-                  onChangeText={(val) => handleEditChange('text', val, index)}
-                />
-                <View style={{ flexDirection: 'row', marginTop: 8 }}>
-                  <Button onPress={() => saveEditedProject(index)}>Save</Button>
-                  <Button onPress={() => setEditIndex(null)}>Cancel</Button>
-                </View>
-              </>
-            ) : (
-              <TouchableOpacity onPress={() => handleProjectPress(item)}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text>{item.text}</Text>
-                <Text style={styles.time}>{new Date(item.time).toLocaleString()}</Text>
-                {item.qrImage && (
-                  <Image
-                    source={{ uri: `data:image/png;base64,${item.qrImage}` }}
-                    style={{ width: 100, height: 100, marginTop: 10 }}
-                  />
-                )}
-                <View style={[styles.row, { marginTop: 8 }]}>
-                  <Button onPress={() => setEditIndex(index)}>Edit</Button>
-                  <Button onPress={() => handleDeleteProject(index)} labelStyle={{ color: 'red' }}>Delete</Button>
-                </View>
               </TouchableOpacity>
-            )}
-          </View>
+
+              {editIndex === index ? (
+                <>
+                  <RNTextInput
+                    value={item.name}
+                    onChangeText={(val) => handleEditChange('name', val, index)}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <RNTextInput
+                    value={item.text}
+                    onChangeText={(val) => handleEditChange('text', val, index)}
+                  />
+                  <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                    <Button onPress={() => saveEditedProject(index)}>Save</Button>
+                    <Button onPress={() => setEditIndex(null)}>Cancel</Button>
+                  </View>
+                </>
+              ) : (
+                <TouchableOpacity onPress={() => handleProjectPress(item)}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text>{item.text}</Text>
+                  <Text style={styles.time}>{new Date(item.time).toLocaleString()}</Text>
+                  {item.qrImage && (
+                    <Image
+                      source={{ uri: `data:image/png;base64,${item.qrImage}` }}
+                      style={{ width: 100, height: 100, marginTop: 10 }}
+                    />
+                  )}
+                  <View style={[styles.row, { marginTop: 8 }]}>
+                    <Button onPress={() => setEditIndex(index)}>Edit</Button>
+                    <Button onPress={() => handleDeleteProject(index)} labelStyle={{ color: 'red' }}>
+                      Delete
+                    </Button>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animatable.View>
         )}
         ListEmptyComponent={!loading ? () => <Text>No projects yet.</Text> : null}
         ref={flatListRef}
       />
 
       <Modal visible={showProjectModal} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
+        <Animatable.View animation="fadeInUp" duration={500} style={styles.modalBackdrop}>
           <View style={styles.modalContainer}>
             <Text>Enter Project Name:</Text>
             <TextInput
@@ -298,14 +380,20 @@ export default function GenerateScreen() {
               mode="outlined"
               style={{ marginVertical: 10 }}
             />
-            <Button mode="contained" onPress={handleSave}>Save</Button>
-            <Button onPress={() => setShowProjectModal(false)} style={{ marginTop: 8 }}>Cancel</Button>
+            <Button mode="contained" onPress={handleSave}>
+              Save
+            </Button>
+            <Button onPress={() => setShowProjectModal(false)} style={{ marginTop: 8 }}>
+              Cancel
+            </Button>
           </View>
-        </View>
+        </Animatable.View>
       </Modal>
     </KeyboardAvoidingView>
   );
 }
+
+// styles remain unchanged
 
 const styles = StyleSheet.create({
   container: {

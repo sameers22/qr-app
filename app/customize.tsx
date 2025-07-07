@@ -6,7 +6,9 @@ import {
   Animated,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  View,
 } from 'react-native';
 import { Button, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
@@ -109,66 +111,86 @@ export default function CustomizeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Title style={styles.title}>Customize QR Code</Title>
+      <Title style={styles.title}> Customize Your QR Code</Title>
 
-      <Text style={styles.label}>QR Color</Text>
-      <TextInput
-        mode="outlined"
-        value={qrColor}
-        onChangeText={setQrColor}
-        style={styles.input}
-        theme={{ colors: { primary: '#2196F3' } }}
-      />
-
-      <Button onPress={() => setShowQRPicker(!showQRPicker)} style={styles.toggleButton} textColor="#2196F3">
-        {showQRPicker ? 'Hide Picker' : 'Pick QR Color'}
-      </Button>
-      {showQRPicker && (
-        <ColorPicker
-          color={qrColor}
-          onColorChangeComplete={setQrColor}
-          thumbSize={24}
-          sliderSize={24}
-          noSnap
-          row
-        />
-      )}
-
-      <Text style={styles.label}>Background Color</Text>
-      <TextInput
-        mode="outlined"
-        value={bgColor}
-        onChangeText={setBgColor}
-        style={styles.input}
-        theme={{ colors: { primary: '#2196F3' } }}
-      />
-
-      <Button onPress={() => setShowBGPicker(!showBGPicker)} style={styles.toggleButton} textColor="#2196F3">
-        {showBGPicker ? 'Hide Picker' : 'Pick Background Color'}
-      </Button>
-      {showBGPicker && (
-        <ColorPicker
-          color={bgColor}
-          onColorChangeComplete={setBgColor}
-          thumbSize={24}
-          sliderSize={24}
-          noSnap
-          row
-        />
-      )}
-
-      <Text style={styles.label}>Live Preview</Text>
-      <Animated.View style={[styles.previewWrapper, { opacity: fadeAnim }]}>
+      {/* QR Code Live Preview */}
+      <Animated.View style={[styles.previewContainer, { opacity: fadeAnim }]}>
         <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1.0 }}>
-          <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
+          <QRCode value={text} size={220} color={qrColor} backgroundColor={bgColor} />
         </ViewShot>
       </Animated.View>
 
-      <Button mode="contained" onPress={handleSave} style={styles.saveButton} buttonColor="#2196F3">
-        Save & Go Back
+      {/* QR Code Color */}
+      <Text style={styles.label}>QR Code Color</Text>
+      <View style={styles.colorRow}>
+        <TextInput
+          mode="outlined"
+          value={qrColor}
+          onChangeText={setQrColor}
+          style={styles.colorInput}
+        />
+        <View style={[styles.swatch, { backgroundColor: qrColor }]} />
+      </View>
+      <View style={styles.toggleRow}>
+        <Text style={styles.toggleLabel}>Show Color Picker</Text>
+        <Switch value={showQRPicker} onValueChange={setShowQRPicker} />
+      </View>
+      {showQRPicker && (
+        <View style={styles.colorPickerWrapper}>
+          <ColorPicker
+            color={qrColor}
+            onColorChangeComplete={setQrColor}
+            thumbSize={28}
+            sliderSize={28}
+          />
+        </View>
+      )}
+
+      {/* Background Color */}
+      <Text style={styles.label}>Background Color</Text>
+      <View style={styles.colorRow}>
+        <TextInput
+          mode="outlined"
+          value={bgColor}
+          onChangeText={setBgColor}
+          style={styles.colorInput}
+        />
+        <View style={[styles.swatch, { backgroundColor: bgColor }]} />
+      </View>
+      <View style={styles.toggleRow}>
+        <Text style={styles.toggleLabel}>Show Color Picker</Text>
+        <Switch value={showBGPicker} onValueChange={setShowBGPicker} />
+      </View>
+      {showBGPicker && (
+        <View style={styles.colorPickerWrapper}>
+          <ColorPicker
+            color={bgColor}
+            onColorChangeComplete={setBgColor}
+            thumbSize={28}
+            sliderSize={28}
+          />
+        </View>
+      )}
+
+      {/* Action Buttons */}
+      <Button
+        mode="contained"
+        icon="check"
+        onPress={handleSave}
+        style={styles.saveButton}
+        buttonColor="#2196F3"
+        labelStyle={{ fontWeight: '600' }}
+      >
+        Save & Return
       </Button>
 
-      <Button mode="outlined" onPress={handleResetToDefault} style={styles.resetButton} textColor="#2196F3">
+      <Button
+        mode="outlined"
+        icon="refresh"
+        onPress={handleResetToDefault}
+        style={styles.resetButton}
+        textColor="#2196F3"
+      >
         Reset to Default
       </Button>
     </ScrollView>
@@ -178,48 +200,73 @@ export default function CustomizeScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    paddingTop: 80,
     padding: 24,
-    backgroundColor: '#f9f9f9',
+    paddingTop: 72,
+    backgroundColor: '#f2f5f8',
   },
   title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 24,
+    fontSize: 26,
+    fontWeight: '700',
     textAlign: 'center',
+    marginBottom: 28,
     color: '#222',
   },
   label: {
     fontSize: 16,
-    marginTop: 20,
+    marginTop: 24,
     fontWeight: '600',
-    color: '#444',
+    color: '#333',
   },
-  input: {
-    marginTop: 8,
-    backgroundColor: '#fff',
-  },
-  toggleButton: {
-    marginTop: 12,
-  },
-  previewWrapper: {
+  colorRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-    padding: 16,
+    marginTop: 8,
+  },
+  colorInput: {
+    flex: 1,
+    marginRight: 12,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: 8,
+  },
+  swatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    color: '#555',
+  },
+  colorPickerWrapper: {
+    marginVertical: 16,
+    alignSelf: 'center',
+    width: '100%',
+    minHeight: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
   },
   saveButton: {
     marginTop: 32,
+    borderRadius: 8,
+    paddingVertical: 10,
   },
   resetButton: {
     marginTop: 16,
-    borderColor: '#aaa',
+    borderRadius: 8,
+    borderColor: '#2196F3',
+    borderWidth: 1.5,
+    paddingVertical: 10,
   },
 });

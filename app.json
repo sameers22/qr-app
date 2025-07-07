@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "winkqr",
-    "slug": "winkqr",
-    "version": "1.0.2",
+    "name": "qr-app",
+    "slug": "qr-app",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/qr-logo.png",
     "scheme": "qrapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "buildNumber": "4",
+      "buildNumber": "5",
       "supportsTablet": true,
       "bundleIdentifier": "com.sameershaik.qrapp",
       "infoPlist": {

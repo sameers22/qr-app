@@ -1,4 +1,8 @@
+// app/(tabs)/index.tsx (GenerateScreen)
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import { useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -13,13 +17,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Button, Divider, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
-// @ts-ignore
-import * as FileSystem from 'expo-file-system';
-import { useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { Button, Divider, TextInput, Title } from 'react-native-paper';
+import eventBus from '../../utils/event-bus';
 
 const BACKEND_URL = 'https://legendbackend.onrender.com';
 
@@ -33,7 +34,7 @@ export default function GenerateScreen() {
   const [search, setSearch] = useState('');
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [qrColor, setQrColor] = useState('#000000');
-  const [bgColor, setBgColor] = useState('#ffffff'); // ✅ added bgColor
+  const [bgColor, setBgColor] = useState('#ffffff');
   const [loading, setLoading] = useState(true);
   const qrRef = useRef<ViewShot>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -41,6 +42,10 @@ export default function GenerateScreen() {
 
   useEffect(() => {
     loadProjects();
+
+    const listener = () => loadProjects();
+    eventBus.on('customizationUpdated', listener);
+    return () => eventBus.off('customizationUpdated', listener);
   }, []);
 
   useEffect(() => {
@@ -69,8 +74,8 @@ export default function GenerateScreen() {
       text: text.trim(),
       time: new Date().toISOString(),
       qrImage: base64,
-      qrColor: qrColor,
-      bgColor: bgColor, // ✅ include bgColor
+      qrColor,
+      bgColor,
     };
 
     try {
@@ -79,7 +84,6 @@ export default function GenerateScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const json = await res.json();
 
       if (res.ok) {
@@ -129,11 +133,30 @@ export default function GenerateScreen() {
     }
   };
 
-  const handleEditChange = (field: 'name' | 'text', value: string, index: number) => {
-    const updated = [...projects];
-    updated[index][field] = value;
-    updated[index].time = new Date().toISOString();
-    setProjects(updated);
+  const handleSearch = useCallback((query: string) => {
+    setSearch(query);
+    if (!query.trim()) return setFilteredProjects(projects);
+    const lower = query.toLowerCase();
+    setFilteredProjects(projects.filter(p =>
+      p.name.toLowerCase().includes(lower) ||
+      p.text.toLowerCase().includes(lower)
+    ));
+  }, [projects]);
+
+  const handleProjectPress = async (item: any) => {
+    await AsyncStorage.setItem('active_project', JSON.stringify(item));
+    setQrColor(item.qrColor || '#000000');
+    setBgColor(item.bgColor || '#ffffff');
+    router.push({
+      pathname: '/(tabs)/analytics',
+      params: { text: item.text, name: item.name }
+    });
+  };
+
+  const shareQR = async () => {
+    if (!qrRef.current?.capture) return;
+    const uri = await qrRef.current.capture();
+    if (uri) await Sharing.shareAsync(uri);
   };
 
   const saveEditedProject = async (index: number) => {
@@ -154,35 +177,28 @@ export default function GenerateScreen() {
     loadProjects();
   };
 
-  const handleSearch = useCallback((query: string) => {
-    setSearch(query);
-    if (!query.trim()) return setFilteredProjects(projects);
-    const lower = query.toLowerCase();
-    setFilteredProjects(projects.filter(p => p.name.toLowerCase().includes(lower) || p.text.toLowerCase().includes(lower)));
-  }, [projects]);
-
-  const handleProjectPress = async (item: any) => {
-    await AsyncStorage.setItem('active_project', JSON.stringify(item));
-    setQrColor(item.qrColor || '#000000');
-    setBgColor(item.bgColor || '#ffffff'); // ✅ restore bgColor
-    router.push({ pathname: '/(tabs)/analytics', params: { text: item.text, name: item.name } });
-  };
-
-  const shareQR = async () => {
-    if (!qrRef.current?.capture) return;
-    const uri = await qrRef.current.capture();
-    if (uri) await Sharing.shareAsync(uri);
+  const handleEditChange = (field: 'name' | 'text', value: string, index: number) => {
+    const updated = [...projects];
+    updated[index][field] = value;
+    updated[index].time = new Date().toISOString();
+    setProjects(updated);
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: undefined })}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.select({ ios: 'padding', android: undefined })}
+    >
       <Title style={styles.heading}>QR Code Generator</Title>
 
       <TextInput
         label="Enter URL or text"
         mode="outlined"
         value={text}
-        onChangeText={(val) => { setText(val); if (!val.trim()) setShowQR(false); }}
+        onChangeText={(val) => {
+          setText(val);
+          if (!val.trim()) setShowQR(false);
+        }}
         style={styles.input}
         theme={{ colors: { primary: '#2196F3' } }}
       />
@@ -196,7 +212,6 @@ export default function GenerateScreen() {
         >
           Generate QR
         </Button>
-
         <Button
           mode="outlined"
           onPress={() => { setText(''); setShowQR(false); }}
@@ -235,10 +250,19 @@ export default function GenerateScreen() {
           <View style={styles.card}>
             {editIndex === index ? (
               <>
-                <RNTextInput value={item.name} onChangeText={(val) => handleEditChange('name', val, index)} />
-                <RNTextInput value={item.text} onChangeText={(val) => handleEditChange('text', val, index)} />
-                <Button onPress={() => saveEditedProject(index)}>Save</Button>
-                <Button onPress={() => setEditIndex(null)}>Cancel</Button>
+                <RNTextInput
+                  value={item.name}
+                  onChangeText={(val) => handleEditChange('name', val, index)}
+                  style={{ marginBottom: 8 }}
+                />
+                <RNTextInput
+                  value={item.text}
+                  onChangeText={(val) => handleEditChange('text', val, index)}
+                />
+                <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                  <Button onPress={() => saveEditedProject(index)}>Save</Button>
+                  <Button onPress={() => setEditIndex(null)}>Cancel</Button>
+                </View>
               </>
             ) : (
               <TouchableOpacity onPress={() => handleProjectPress(item)}>
@@ -246,9 +270,12 @@ export default function GenerateScreen() {
                 <Text>{item.text}</Text>
                 <Text style={styles.time}>{new Date(item.time).toLocaleString()}</Text>
                 {item.qrImage && (
-                  <Image source={{ uri: `data:image/png;base64,${item.qrImage}` }} style={{ width: 100, height: 100, marginTop: 10 }} />
+                  <Image
+                    source={{ uri: `data:image/png;base64,${item.qrImage}` }}
+                    style={{ width: 100, height: 100, marginTop: 10 }}
+                  />
                 )}
-                <View style={styles.row}>
+                <View style={[styles.row, { marginTop: 8 }]}>
                   <Button onPress={() => setEditIndex(index)}>Edit</Button>
                   <Button onPress={() => handleDeleteProject(index)} labelStyle={{ color: 'red' }}>Delete</Button>
                 </View>
@@ -256,10 +283,10 @@ export default function GenerateScreen() {
             )}
           </View>
         )}
-        ListEmptyComponent={<Text>No projects yet.</Text>}
+        ListEmptyComponent={!loading ? () => <Text>No projects yet.</Text> : null}
+        ref={flatListRef}
       />
 
-      {/* Modal to enter project name */}
       <Modal visible={showProjectModal} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContainer}>

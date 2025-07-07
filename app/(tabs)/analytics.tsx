@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useRef, useState } from 'react';
@@ -18,6 +19,11 @@ export default function AnalyticsScreen() {
   const [qrColor, setQrColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#ffffff');
   const qrRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
+
+  const isURL = /^https?:\/\//i.test(text);
+  const linkToOpen = isURL
+    ? text
+    : `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 
   const loadCustomizationFromBackend = async () => {
     try {
@@ -66,6 +72,14 @@ export default function AnalyticsScreen() {
     });
   };
 
+  const handleOpenLink = async () => {
+    try {
+      await Linking.openURL(linkToOpen);
+    } catch (err) {
+      Alert.alert('Failed to open', 'Could not launch the URL or search.');
+    }
+  };
+
   if (!text || !name) {
     return (
       <View style={styles.container}>
@@ -87,9 +101,25 @@ export default function AnalyticsScreen() {
         </ViewShot>
       </View>
 
-      <Button mode="outlined" onPress={handleShareQR} style={styles.shareButton} textColor="#2196F3">
-        Share QR
-      </Button>
+      {/* Share + Open buttons in same row */}
+      <View style={styles.shareRow}>
+        <Button
+          mode="outlined"
+          onPress={handleShareQR}
+          style={styles.shareButton}
+          textColor="#2196F3"
+        >
+          Share QR
+        </Button>
+        <Button
+          mode="outlined"
+          onPress={handleOpenLink}
+          style={styles.shareButton}
+          textColor="#2196F3"
+        >
+          {isURL ? 'Open Link' : 'Search Online'}
+        </Button>
+      </View>
 
       <View style={styles.buttonRow}>
         <Button mode="contained" onPress={handleCustomizePress} style={styles.button} buttonColor="#2196F3">
@@ -143,8 +173,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
   },
-  shareButton: {
+  shareRow: {
+    flexDirection: 'row',
+    gap: 12,
     marginBottom: 16,
+  },
+  shareButton: {
+    flex: 1,
+    borderColor: '#2196F3',
   },
   buttonRow: {
     flexDirection: 'row',

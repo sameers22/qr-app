@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { Button, TextInput, Title } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
+import ViewShot from 'react-native-view-shot';
 import ColorPicker from 'react-native-wheel-color-picker';
 import eventBus from '../utils/event-bus';
 
@@ -27,6 +29,7 @@ export default function CustomizeScreen() {
   const [showBGPicker, setShowBGPicker] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const viewShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -47,28 +50,41 @@ export default function CustomizeScreen() {
     fetchProject();
   }, [name, text]);
 
-  const updateColors = async (qrColorValue: string, bgColorValue: string) => {
-    if (!projectId) {
-      Alert.alert('Missing project ID');
+  const updateColorsAndImage = async (qrColorValue: string, bgColorValue: string) => {
+    if (!projectId || !viewShotRef.current) {
+      Alert.alert('Missing project ID or QR view');
       return;
     }
 
     try {
+      const uri = await viewShotRef.current?.capture?.();
+      if (!uri) {
+        Alert.alert('Failed to capture QR image');
+        return;
+      }
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
       await fetch(`${BACKEND_URL}/api/update-color/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrColor: qrColorValue, bgColor: bgColorValue }),
+        body: JSON.stringify({
+          qrColor: qrColorValue,
+          bgColor: bgColorValue,
+          qrImage: base64,
+        }),
       });
 
       eventBus.emit('customizationUpdated', { name, text });
     } catch (err) {
-      console.error('Color update failed:', err);
-      Alert.alert('Failed to update colors');
+      console.error('Color/image update failed:', err);
+      Alert.alert('Failed to update project');
     }
   };
 
   const handleSave = async () => {
-    await updateColors(qrColor, bgColor);
+    await updateColorsAndImage(qrColor, bgColor);
     router.back();
   };
 
@@ -82,7 +98,7 @@ export default function CustomizeScreen() {
       const defaultBG = '#ffffff';
       setQrColor(defaultQR);
       setBgColor(defaultBG);
-      await updateColors(defaultQR, defaultBG);
+      await updateColorsAndImage(defaultQR, defaultBG);
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
@@ -143,7 +159,9 @@ export default function CustomizeScreen() {
 
       <Text style={styles.label}>Live Preview</Text>
       <Animated.View style={[styles.previewWrapper, { opacity: fadeAnim }]}>
-        <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
+        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1.0 }}>
+          <QRCode value={text} size={200} color={qrColor} backgroundColor={bgColor} />
+        </ViewShot>
       </Animated.View>
 
       <Button mode="contained" onPress={handleSave} style={styles.saveButton} buttonColor="#2196F3">
